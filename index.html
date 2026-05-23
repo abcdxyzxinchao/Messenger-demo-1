@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messenger Security</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #000; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+        #auth-screen, #chat-screen { flex: 1; padding: 20px; display: flex; flex-direction: column; }
+        #chat-screen { display: none; }
+        .message { background: #333; padding: 10px; border-radius: 15px; margin-bottom: 10px; width: fit-content; max-width: 80%; }
+        input { padding: 10px; margin: 10px 0; border-radius: 20px; border: none; }
+        button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <!-- Màn hình Đăng nhập -->
+    <div id="auth-screen">
+        <h2>Messenger Login</h2>
+        <button onclick="login()">Đăng nhập bằng Google</button>
+    </div>
+
+    <!-- Màn hình Chat -->
+    <div id="chat-screen">
+        <div id="chatList" style="flex: 1; overflow-y: auto;"></div>
+        <input id="msgInput" placeholder="Aa...">
+        <button onclick="sendMessage()">Gửi</button>
+        <button onclick="logout()" style="background:red; margin-top:5px;">Đăng xuất</button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getAuth, signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        const firebaseConfig = { /* ĐIỀN CONFIG CỦA BẠN VÀO ĐÂY */ };
+        const secretKey = "mat-ma-bi-mat";
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        const provider = new GoogleAuthProvider();
+
+        window.login = () => signInWithRedirect(auth, provider);
+        window.logout = () => signOut(auth);
+
+        // Kiểm tra trạng thái đăng nhập
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('auth-screen').style.display = 'none';
+                document.getElementById('chat-screen').style.display = 'flex';
+                loadMessages();
+            } else {
+                document.getElementById('auth-screen').style.display = 'flex';
+                document.getElementById('chat-screen').style.display = 'none';
+            }
+        });
+
+        function loadMessages() {
+            onValue(ref(db, 'messages'), (snapshot) => {
+                const list = document.getElementById("chatList");
+                list.innerHTML = "";
+                snapshot.forEach((child) => {
+                    const decrypted = CryptoJS.AES.decrypt(child.val().text, secretKey).toString(CryptoJS.enc.Utf8);
+                    list.innerHTML += `<div class="message">${decrypted}</div>`;
+                });
+            });
+        }
+
+        window.sendMessage = () => {
+            const input = document.getElementById("msgInput");
+            const encrypted = CryptoJS.AES.encrypt(input.value, secretKey).toString();
+            push(ref(db, 'messages'), { text: encrypted });
+            input.value = "";
+        };
+    </script>
+</body>
+</html>
