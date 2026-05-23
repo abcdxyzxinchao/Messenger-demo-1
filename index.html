@@ -6,7 +6,6 @@
     <title>Messenger Security Pro</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; height: 100vh; display: flex; flex-direction: column; }
-        /* Tối ưu Splash */
         #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:9999; transition: opacity 0.5s; }
         #auth-screen { flex: 1; display: none; align-items: center; justify-content: center; padding: 20px; }
         .auth-box { width: 100%; max-width: 350px; background: #1e1e1e; padding: 30px; border-radius: 25px; border: 1px solid #333; display: flex; flex-direction: column; gap: 15px; }
@@ -61,22 +60,24 @@
     </div>
 
     <script type="module">
-        // CHỐT: Dùng setTimeout để đảm bảo logo tắt sau 2 giây dù Firebase có load xong hay chưa
-        setTimeout(() => {
-            const splash = document.getElementById('splash');
-            splash.style.opacity = '0';
-            setTimeout(() => splash.style.display = 'none', 500);
-        }, 2000);
-
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        const firebaseConfig = { /* Dán lại config của ông ở đây */ };
+        // CONFIG CỦA ÔNG (Dán vào đây)
+        const firebaseConfig = { /* Dán lại config ở đây */ };
+        
         const app = initializeApp(firebaseConfig);
         window.auth = getAuth(app);
         window.db = getDatabase(app);
         window.currentChatId = null;
+
+        // Cơ chế tắt splash an toàn
+        setTimeout(() => {
+            const splash = document.getElementById('splash');
+            splash.style.opacity = '0';
+            setTimeout(() => splash.style.display = 'none', 500);
+        }, 1000);
 
         window.handleAuth = () => {
             signInWithEmailAndPassword(window.auth, document.getElementById('email').value, document.getElementById('pass').value)
@@ -114,7 +115,6 @@
             if (!input.value.trim()) return;
             const path = window.currentChatId ? 'chats/' + window.currentChatId : 'messages';
             push(ref(window.db, path), { text: input.value, uid: window.auth.currentUser.uid });
-            input.value = "";
             input.value = "";
         };
 
