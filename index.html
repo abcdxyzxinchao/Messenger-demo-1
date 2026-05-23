@@ -2,7 +2,6 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Messenger Security Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
@@ -11,7 +10,8 @@
         #auth-screen, #chat-screen, #friend-screen { display: none; flex: 1; flex-direction: column; width: 100%; max-width: 500px; margin: auto; }
         .bubble { padding: 12px; border-radius: 15px; margin: 5px; max-width: 75%; background: #333; }
         .sent { background: #0084ff; align-self: flex-end; }
-        button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; }
+        button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; margin: 5px; }
+        input { padding: 10px; margin: 5px; border-radius: 20px; border: none; }
     </style>
 </head>
 <body>
@@ -21,67 +21,70 @@
     <div id="auth-screen">
         <input id="email" placeholder="Email">
         <input id="pass" type="password" placeholder="Mật khẩu">
-        <button onclick="handleAuth()">Đăng nhập</button>
+        <button onclick="login()">Đăng nhập</button>
     </div>
 
     <div id="chat-screen">
         <div id="header">
-            <button onclick="switchScreen('friend-screen')">Bạn bè</button>
+            <button onclick="goScreen('friend-screen')">Danh sách bạn bè</button>
         </div>
         <div id="chatList"></div>
         <input id="msgInput" placeholder="Aa...">
-        <button onclick="sendMessage()">Gửi</button>
+        <button onclick="sendMsg()">Gửi</button>
     </div>
 
     <div id="friend-screen">
-        <input id="searchEmail" placeholder="Email...">
-        <button onclick="findFriend()">Tìm</button>
+        <input id="searchEmail" placeholder="Email bạn bè...">
+        <button onclick="findFriend()">Tìm kiếm</button>
         <div id="friend-list"></div>
-        <button onclick="switchScreen('chat-screen')">Quay lại Chat</button>
+        <button onclick="goScreen('chat-screen')">Quay lại Chat</button>
     </div>
 
     <script type="module">
+        // 1. TẮT SPLASH NGAY LẬP TỨC
+        document.getElementById('splash').style.display = 'none';
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        // DÁN CONFIG CỦA ÔNG VÀO ĐÂY
-        const firebaseConfig = { /* apiKey, ... */ };
-        
-        const app = initializeApp(firebaseConfig);
-        window.auth = getAuth(app);
-        window.db = getDatabase(app);
-        window.currentChatId = null;
+        // CONFIG CỦA ÔNG (ĐIỀN VÀO ĐÂY)
+        const firebaseConfig = { 
+            // Dán thông tin vào đây, đảm bảo không thiếu dấu phẩy
+        };
 
-        // TẮT SPLASH NGAY LẬP TỨC
-        document.getElementById('splash').style.display = 'none';
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.auth = getAuth(app);
+            window.db = getDatabase(app);
+            window.currentChatId = null;
 
-        onAuthStateChanged(window.auth, (user) => {
-            if (user) {
-                document.getElementById('auth-screen').style.display = 'none';
-                document.getElementById('chat-screen').style.display = 'flex';
-                loadMessages();
-            } else {
-                document.getElementById('auth-screen').style.display = 'flex';
-            }
-        });
+            onAuthStateChanged(window.auth, (user) => {
+                if (user) {
+                    document.getElementById('auth-screen').style.display = 'none';
+                    document.getElementById('chat-screen').style.display = 'flex';
+                    set(ref(window.db, 'users/' + user.uid), { email: user.email });
+                    loadMessages();
+                } else {
+                    document.getElementById('auth-screen').style.display = 'flex';
+                }
+            });
+        } catch (e) { alert("Lỗi khởi tạo: " + e.message); }
 
-        // HÀM ĐIỀU HƯỚNG
-        window.switchScreen = (id) => {
+        // CÁC HÀM XỬ LÝ
+        window.login = () => {
+            signInWithEmailAndPassword(window.auth, document.getElementById('email').value, document.getElementById('pass').value)
+            .catch(e => alert(e.message));
+        };
+
+        window.goScreen = (id) => {
             document.getElementById('chat-screen').style.display = id === 'chat-screen' ? 'flex' : 'none';
             document.getElementById('friend-screen').style.display = id === 'friend-screen' ? 'flex' : 'none';
         };
 
-        window.handleAuth = () => {
-            const email = document.getElementById('email').value;
-            const pass = document.getElementById('pass').value;
-            signInWithEmailAndPassword(window.auth, email, pass).catch(e => alert(e.message));
-        };
-
         window.findFriend = async () => {
             const email = document.getElementById("searchEmail").value;
-            const q = query(ref(window.db, 'users'), orderByChild('email'), equalTo(email));
-            const snap = await get(q);
+            const snap = await get(query(ref(window.db, 'users'), orderByChild('email'), equalTo(email)));
             const list = document.getElementById("friend-list");
             list.innerHTML = "";
             snap.forEach(child => {
@@ -90,16 +93,14 @@
         };
 
         window.addFriend = (friendUid) => {
-            const myUid = window.auth.currentUser.uid;
-            const chatId = [myUid, friendUid].sort().join('_');
-            set(ref(window.db, 'friends/' + myUid + '/' + friendUid), { chatId });
-            set(ref(window.db, 'friends/' + friendUid + '/' + myUid), { chatId });
+            const chatId = [window.auth.currentUser.uid, friendUid].sort().join('_');
+            set(ref(window.db, 'friends/' + window.auth.currentUser.uid + '/' + friendUid), { chatId });
+            set(ref(window.db, 'friends/' + friendUid + '/' + window.auth.currentUser.uid), { chatId });
             alert("Đã kết bạn!");
         };
 
-        window.sendMessage = () => {
+        window.sendMsg = () => {
             const input = document.getElementById("msgInput");
-            if (!input.value.trim()) return;
             const path = window.currentChatId ? 'chats/' + window.currentChatId : 'messages';
             push(ref(window.db, path), { text: input.value, uid: window.auth.currentUser.uid });
             input.value = "";
@@ -112,8 +113,7 @@
                 list.innerHTML = "";
                 snapshot.forEach(child => {
                     const msg = child.val();
-                    const isMe = msg.uid === window.auth.currentUser.uid;
-                    list.innerHTML += `<div class="bubble ${isMe ? 'sent' : ''}">${msg.text}</div>`;
+                    list.innerHTML += `<div class="bubble ${msg.uid === window.auth.currentUser.uid ? 'sent' : ''}">${msg.text}</div>`;
                 });
             });
         }
