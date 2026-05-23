@@ -4,19 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Messenger Security Pro</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; height: 100vh; display: flex; flex-direction: column; }
-        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:9999; }
-        
+        /* Tối ưu Splash */
+        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:9999; transition: opacity 0.5s; }
         #auth-screen { flex: 1; display: none; align-items: center; justify-content: center; padding: 20px; }
         .auth-box { width: 100%; max-width: 350px; background: #1e1e1e; padding: 30px; border-radius: 25px; border: 1px solid #333; display: flex; flex-direction: column; gap: 15px; }
         .auth-box input { padding: 15px; border-radius: 12px; border: none; background: #2a2a2a; color: white; }
         .auth-btn { padding: 12px; border-radius: 12px; border: none; background: #0084ff; color: white; font-weight: bold; cursor: pointer; }
-
         #chat-screen, #friend-screen { display: none; flex: 1; flex-direction: column; width: 100%; max-width: 500px; margin: auto; background: #121212; }
         #header { width: 100%; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; }
-        
         #chatList { flex: 1; width: 100%; overflow-y: auto; padding: 10px; }
         .message-row { display: flex; margin-bottom: 10px; }
         .row-sent { justify-content: flex-end; }
@@ -32,16 +29,14 @@
 
     <div id="splash"><h1>Messenger Pro</h1></div>
 
-    <!-- Màn hình Auth -->
     <div id="auth-screen">
         <div class="auth-box">
             <input id="email" placeholder="Email">
             <input id="pass" type="password" placeholder="Mật khẩu">
-            <button class="auth-btn" onclick="handleEmailAuth('login')">Đăng nhập</button>
+            <button class="auth-btn" onclick="handleAuth()">Đăng nhập</button>
         </div>
     </div>
 
-    <!-- Màn hình Chat -->
     <div id="chat-screen">
         <div id="header">
             <button onclick="switchScreen('friend-screen')">Tìm bạn</button>
@@ -55,7 +50,6 @@
         </div>
     </div>
 
-    <!-- Màn hình Bạn bè -->
     <div id="friend-screen">
         <div id="header">
             <button onclick="switchScreen('chat-screen')">Quay lại</button>
@@ -67,28 +61,36 @@
     </div>
 
     <script type="module">
+        // CHỐT: Dùng setTimeout để đảm bảo logo tắt sau 2 giây dù Firebase có load xong hay chưa
+        setTimeout(() => {
+            const splash = document.getElementById('splash');
+            splash.style.opacity = '0';
+            setTimeout(() => splash.style.display = 'none', 500);
+        }, 2000);
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        // Firebase Config (Giữ nguyên của ông)
-        const firebaseConfig = { /* apiKey, ... */ };
+        const firebaseConfig = { /* Dán lại config của ông ở đây */ };
         const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getDatabase(app);
-        
-        window.currentChatId = null; // ID chat riêng tư
+        window.auth = getAuth(app);
+        window.db = getDatabase(app);
+        window.currentChatId = null;
 
-        // Điều hướng
+        window.handleAuth = () => {
+            signInWithEmailAndPassword(window.auth, document.getElementById('email').value, document.getElementById('pass').value)
+            .catch(e => alert(e.message));
+        };
+
         window.switchScreen = (id) => {
             document.getElementById('chat-screen').style.display = id === 'chat-screen' ? 'flex' : 'none';
             document.getElementById('friend-screen').style.display = id === 'friend-screen' ? 'flex' : 'none';
         };
 
-        // Logic Tìm bạn
         window.findFriend = async () => {
             const email = document.getElementById("searchEmail").value;
-            const q = query(ref(db, 'users'), orderByChild('email'), equalTo(email));
+            const q = query(ref(window.db, 'users'), orderByChild('email'), equalTo(email));
             const snap = await get(q);
             const list = document.getElementById("friend-list");
             list.innerHTML = "";
@@ -98,53 +100,49 @@
         };
 
         window.addFriend = (friendUid) => {
-            const myUid = auth.currentUser.uid;
+            const myUid = window.auth.currentUser.uid;
             const chatId = [myUid, friendUid].sort().join('_');
-            // Tạo link liên kết giữa 2 người
-            set(ref(db, 'friends/' + myUid + '/' + friendUid), { chatId });
-            set(ref(db, 'friends/' + friendUid + '/' + myUid), { chatId });
+            set(ref(window.db, 'friends/' + myUid + '/' + friendUid), { chatId });
+            set(ref(window.db, 'friends/' + friendUid + '/' + myUid), { chatId });
             window.currentChatId = chatId;
             loadMessages();
             switchScreen('chat-screen');
         };
 
-        // Logic gửi tin nhắn (Tự động chọn nhắn riêng hoặc chung)
         window.sendMessage = () => {
             const input = document.getElementById("msgInput");
             if (!input.value.trim()) return;
             const path = window.currentChatId ? 'chats/' + window.currentChatId : 'messages';
-            push(ref(db, path), { text: input.value, uid: auth.currentUser.uid });
+            push(ref(window.db, path), { text: input.value, uid: window.auth.currentUser.uid });
+            input.value = "";
             input.value = "";
         };
 
-        // Load tin nhắn
         function loadMessages() {
             const path = window.currentChatId ? 'chats/' + window.currentChatId : 'messages';
-            onValue(ref(db, path), (snapshot) => {
+            onValue(ref(window.db, path), (snapshot) => {
                 const list = document.getElementById("chatList");
                 list.innerHTML = "";
                 snapshot.forEach(child => {
                     const msg = child.val();
-                    const isMe = msg.uid === auth.currentUser.uid;
+                    const isMe = msg.uid === window.auth.currentUser.uid;
                     list.innerHTML += `<div class="message-row ${isMe ? 'row-sent' : ''}"><div class="bubble ${isMe ? 'sent' : 'received'}">${msg.text}</div></div>`;
                 });
             });
         }
 
-        onAuthStateChanged(auth, (user) => {
-            document.getElementById('splash').style.display = 'none';
+        onAuthStateChanged(window.auth, (user) => {
             if(user) {
                 document.getElementById('auth-screen').style.display = 'none';
                 document.getElementById('chat-screen').style.display = 'flex';
-                // Lưu user vào DB để tìm kiếm được
-                set(ref(db, 'users/' + user.uid), { email: user.email });
+                set(ref(window.db, 'users/' + user.uid), { email: user.email });
                 loadMessages();
             } else {
                 document.getElementById('auth-screen').style.display = 'flex';
             }
         });
         
-        window.logout = () => signOut(auth).then(() => window.location.reload());
+        window.logout = () => signOut(window.auth).then(() => window.location.reload());
     </script>
 </body>
 </html>
