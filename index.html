@@ -166,7 +166,10 @@
                     const msg = child.val();
                     const isMe = msg.uid === auth.currentUser.uid;
                     let content = msg.text;
-                    if (msg.type === 'text' && msg.encrypted) content = CryptoJS.AES.decrypt(msg.text, secretKey).toString(CryptoJS.enc.Utf8);
+                    // Logic giải mã thông minh: kiểm tra nếu tin nhắn có dạng mã hóa hoặc đã bật cờ encrypted
+                    if (msg.type === 'text' && (msg.encrypted || msg.text.startsWith('U2Fsd'))) {
+                        try { content = CryptoJS.AES.decrypt(msg.text, secretKey).toString(CryptoJS.enc.Utf8); } catch(e) {}
+                    }
                     
                     if (msg.type === 'image') content = `<img src="${msg.text}" style="width:100%; border-radius:10px">`;
                     else if (msg.type === 'video') content = `<video src="${msg.text}" controls style="width:100%"></video>`;
