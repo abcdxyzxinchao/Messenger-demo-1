@@ -2,6 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Messenger Security Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
@@ -20,12 +21,12 @@
     <div id="auth-screen">
         <input id="email" placeholder="Email">
         <input id="pass" type="password" placeholder="Mật khẩu">
-        <button onclick="handleAuth('login')">Đăng nhập</button>
+        <button onclick="handleAuth()">Đăng nhập</button>
     </div>
 
     <div id="chat-screen">
         <div id="header">
-            <button onclick="showFriendScreen()">Bạn bè</button>
+            <button onclick="switchScreen('friend-screen')">Bạn bè</button>
         </div>
         <div id="chatList"></div>
         <input id="msgInput" placeholder="Aa...">
@@ -36,7 +37,7 @@
         <input id="searchEmail" placeholder="Email...">
         <button onclick="findFriend()">Tìm</button>
         <div id="friend-list"></div>
-        <button onclick="showChatScreen()">Quay lại</button>
+        <button onclick="switchScreen('chat-screen')">Quay lại Chat</button>
     </div>
 
     <script type="module">
@@ -44,46 +45,37 @@
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        // CẤU HÌNH (Dán lại config cũ của ông vào đây)
-        const firebaseConfig = { 
-            /* apiKey, authDomain, databaseURL, projectId, storageBucket, messagingSenderId, appId */ 
-        };
+        // DÁN CONFIG CỦA ÔNG VÀO ĐÂY
+        const firebaseConfig = { /* apiKey, ... */ };
         
         const app = initializeApp(firebaseConfig);
         window.auth = getAuth(app);
         window.db = getDatabase(app);
         window.currentChatId = null;
 
-        // Cơ chế bảo hiểm: Tắt màn hình chờ sau 3 giây bất kể lỗi
-        setTimeout(() => document.getElementById('splash').style.display = 'none', 3000);
+        // TẮT SPLASH NGAY LẬP TỨC
+        document.getElementById('splash').style.display = 'none';
 
         onAuthStateChanged(window.auth, (user) => {
-            document.getElementById('splash').style.display = 'none';
             if (user) {
                 document.getElementById('auth-screen').style.display = 'none';
                 document.getElementById('chat-screen').style.display = 'flex';
-                set(ref(window.db, 'users/' + user.uid), { email: user.email });
                 loadMessages();
             } else {
                 document.getElementById('auth-screen').style.display = 'flex';
             }
         });
 
-        // HÀM GỌI TỪ NÚT BẤM (Gán vào window)
-        window.handleAuth = (type) => {
+        // HÀM ĐIỀU HƯỚNG
+        window.switchScreen = (id) => {
+            document.getElementById('chat-screen').style.display = id === 'chat-screen' ? 'flex' : 'none';
+            document.getElementById('friend-screen').style.display = id === 'friend-screen' ? 'flex' : 'none';
+        };
+
+        window.handleAuth = () => {
             const email = document.getElementById('email').value;
             const pass = document.getElementById('pass').value;
             signInWithEmailAndPassword(window.auth, email, pass).catch(e => alert(e.message));
-        };
-
-        window.showFriendScreen = () => {
-            document.getElementById('chat-screen').style.display = 'none';
-            document.getElementById('friend-screen').style.display = 'flex';
-        };
-
-        window.showChatScreen = () => {
-            document.getElementById('friend-screen').style.display = 'none';
-            document.getElementById('chat-screen').style.display = 'flex';
         };
 
         window.findFriend = async () => {
