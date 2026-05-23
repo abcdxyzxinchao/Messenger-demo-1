@@ -6,17 +6,27 @@
     <title>Messenger Security Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #auth-screen, #chat-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; height: 100vh; display: flex; flex-direction: column; }
+        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:1000; }
+        #auth-screen, #chat-screen { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; }
         #chat-screen { display: none; width: 100%; max-width: 500px; margin: auto; }
-        #chatList { flex: 1; width: 100%; overflow-y: auto; padding: 10px; box-sizing: border-box; }
-        .message { background: #333; padding: 10px; border-radius: 15px; margin-bottom: 10px; width: fit-content; max-width: 80%; }
-        .controls { width: 100%; padding: 10px; display: flex; gap: 5px; }
+        #header { width: 100%; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; }
+        #avatar { width: 40px; height: 40px; border-radius: 50%; cursor: pointer; }
+        #chatList { flex: 1; width: 100%; overflow-y: auto; padding: 10px; }
+        .message-row { display: flex; margin-bottom: 10px; }
+        .row-sent { justify-content: flex-end; }
+        .row-received { justify-content: flex-start; }
+        .bubble { padding: 10px; border-radius: 15px; max-width: 70%; word-break: break-all; }
+        .sent { background: #0084ff; }
+        .received { background: #333; }
+        .controls { width: 100%; padding: 10px; display: flex; gap: 5px; background: #1e1e1e; }
         input { flex: 1; padding: 10px; border-radius: 20px; border: none; }
         button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
+
+    <div id="splash"><h1>Messenger Pro</h1></div>
 
     <div id="auth-screen">
         <h2>Messenger Login</h2>
@@ -24,16 +34,18 @@
     </div>
 
     <div id="chat-screen">
+        <div id="header">
+            <span id="userName"></span>
+            <img id="avatar" onclick="showProfile()">
+        </div>
         <div id="chatList"></div>
         <div class="controls">
-            <!-- Đã chỉnh sửa accept để chọn được cả ảnh và video -->
             <input type="file" id="fileInput" accept="image/*,video/*" style="display:none" onchange="uploadFile(this)">
             <button onclick="document.getElementById('fileInput').click()">📷</button>
             <button id="recordBtn" onclick="toggleRecord()">🎤</button>
             <input id="msgInput" placeholder="Aa...">
             <button onclick="sendMessage()">Gửi</button>
         </div>
-        <button onclick="logout()" style="background:red; width: 100%;">Đăng xuất</button>
     </div>
 
     <script type="module">
@@ -52,7 +64,7 @@
             appId: "1:1067521129086:web:c29e00e5a5cd84bb74362f"
         };
 
-        const IMGBB_API_KEY = "4253826aefafd5914150b4fd1aa77b46";
+        const IMGBB_API_KEY = "A7c68b09464ef65e34e1b1db53d724f5";
         const IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload";
         const secretKey = "mat-ma-bi-mat";
 
@@ -63,50 +75,42 @@
         const provider = new GoogleAuthProvider();
 
         window.login = () => signInWithPopup(auth, provider);
-        window.logout = () => signOut(auth);
-
+        
         onAuthStateChanged(auth, (user) => {
+            setTimeout(() => document.getElementById('splash').style.display = 'none', 1000);
             document.getElementById('auth-screen').style.display = user ? 'none' : 'flex';
             document.getElementById('chat-screen').style.display = user ? 'flex' : 'none';
-            if(user) loadMessages();
+            if(user) {
+                document.getElementById('avatar').src = user.photoURL;
+                document.getElementById('userName').innerText = user.displayName;
+                loadMessages();
+            }
         });
 
         window.sendMessage = () => {
             const input = document.getElementById("msgInput");
             if (!input.value.trim()) return;
             const encrypted = CryptoJS.AES.encrypt(input.value, secretKey).toString();
-            push(ref(db, 'messages'), { text: encrypted, type: 'text' });
+            push(ref(db, 'messages'), { text: encrypted, type: 'text', uid: auth.currentUser.uid });
             input.value = "";
         };
 
-        // Hàm upload xử lý thông minh
         window.uploadFile = async (input) => {
             const file = input.files[0];
             if (!file) return;
-
             if (file.type.startsWith('video')) {
-                // Nếu là video: Dùng Firebase Storage
                 const path = 'videos/' + Date.now() + file.name;
                 const snapshot = await uploadBytes(storageRef(storage, path), file);
                 const url = await getDownloadURL(snapshot.ref);
-                push(ref(db, 'messages'), { text: url, type: 'video' });
+                push(ref(db, 'messages'), { text: url, type: 'video', uid: auth.currentUser.uid });
             } else {
-                // Nếu là ảnh: Dùng Imgbb
                 const formData = new FormData();
                 formData.append('image', file);
                 formData.append('key', IMGBB_API_KEY);
-
-                try {
-                    const response = await fetch(IMGBB_UPLOAD_URL, { method: 'POST', body: formData });
-                    const result = await response.json();
-                    if (result.success) {
-                        push(ref(db, 'messages'), { text: result.data.url, type: 'image' });
-                    } else {
-                        alert("Lỗi upload ảnh: " + result.error.message);
-                    }
-                } catch (error) {
-                    console.error("Lỗi:", error);
-                }
+                const response = await fetch(IMGBB_UPLOAD_URL, { method: 'POST', body: formData });
+                const result = await response.json();
+                if (result.success) push(ref(db, 'messages'), { text: result.data.url, type: 'image', uid: auth.currentUser.uid });
+                else alert("Lỗi upload ảnh: " + result.error.message);
             }
         };
 
@@ -123,7 +127,7 @@
                     const path = 'audio/' + Date.now() + '.webm';
                     const snapshot = await uploadBytes(storageRef(storage, path), blob);
                     const url = await getDownloadURL(snapshot.ref);
-                    push(ref(db, 'messages'), { text: url, type: 'audio' });
+                    push(ref(db, 'messages'), { text: url, type: 'audio', uid: auth.currentUser.uid });
                     chunks = [];
                 };
             } else {
@@ -137,17 +141,23 @@
                 const list = document.getElementById("chatList");
                 list.innerHTML = "";
                 snapshot.forEach((child) => {
-                    const {text, type} = child.val();
+                    const msg = child.val();
+                    const isMe = msg.uid === auth.currentUser.uid;
                     let content = "";
-                    if (type === 'text') content = CryptoJS.AES.decrypt(text, secretKey).toString(CryptoJS.enc.Utf8);
-                    else if (type === 'image') content = `<img src="${text}" style="width:100%; border-radius:10px">`;
-                    else if (type === 'video') content = `<video src="${text}" controls style="width:100%"></video>`;
-                    else if (type === 'audio') content = `<audio src="${text}" controls></audio>`;
-                    list.innerHTML += `<div class="message">${content}</div>`;
+                    if (msg.type === 'text') content = CryptoJS.AES.decrypt(msg.text, secretKey).toString(CryptoJS.enc.Utf8);
+                    else if (msg.type === 'image') content = `<img src="${msg.text}" style="width:100%; border-radius:10px">`;
+                    else if (msg.type === 'video') content = `<video src="${msg.text}" controls style="width:100%"></video>`;
+                    else if (msg.type === 'audio') content = `<audio src="${msg.text}" controls></audio>`;
+                    
+                    list.innerHTML += `
+                        <div class="message-row ${isMe ? 'row-sent' : 'row-received'}">
+                            <div class="bubble ${isMe ? 'sent' : 'received'}">${content}</div>
+                        </div>`;
                 });
                 list.scrollTop = list.scrollHeight;
             });
         }
+        window.showProfile = () => { if(confirm("Đăng xuất tài khoản?")) signOut(auth); };
     </script>
 </body>
 </html>
