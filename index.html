@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Messenger Security</title>
+    <title>Messenger Security Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #000; color: #fff; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        #auth-screen, #chat-screen { width: 100%; max-width: 400px; padding: 20px; display: flex; flex-direction: column; }
-        #chat-screen { display: none; }
+        body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #auth-screen, #chat-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #chat-screen { display: none; width: 100%; max-width: 500px; margin: auto; }
+        #chatList { flex: 1; width: 100%; overflow-y: auto; padding: 10px; box-sizing: border-box; }
         .message { background: #333; padding: 10px; border-radius: 15px; margin-bottom: 10px; width: fit-content; max-width: 80%; }
-        input { padding: 10px; margin: 10px 0; border-radius: 20px; border: none; }
+        .controls { width: 100%; padding: 10px; display: flex; gap: 5px; }
+        input { flex: 1; padding: 10px; border-radius: 20px; border: none; }
         button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; }
     </style>
 </head>
@@ -22,16 +24,22 @@
     </div>
 
     <div id="chat-screen">
-        <div id="chatList" style="flex: 1; overflow-y: auto; height: 300px;"></div>
-        <input id="msgInput" placeholder="Aa...">
-        <button onclick="sendMessage()">Gửi</button>
-        <button onclick="logout()" style="background:red; margin-top:5px;">Đăng xuất</button>
+        <div id="chatList"></div>
+        <div class="controls">
+            <input type="file" id="fileInput" accept="image/*,video/*" style="display:none" onchange="uploadFile(this)">
+            <button onclick="document.getElementById('fileInput').click()">📷</button>
+            <button id="recordBtn" onclick="toggleRecord()">🎤</button>
+            <input id="msgInput" placeholder="Aa...">
+            <button onclick="sendMessage()">Gửi</button>
+        </div>
+        <button onclick="logout()" style="background:red; width: 100%;">Đăng xuất</button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBMsgEHeLOUMv4DCkfpj5vsjCQC6ySNNg0",
@@ -40,50 +48,80 @@
             projectId: "mesaenger-demo",
             storageBucket: "mesaenger-demo.firebasestorage.app",
             messagingSenderId: "1067521129086",
-            appId: "1:1067521129086:web:c29e00e5a5cd84bb74362f",
-            measurementId: "G-V7BVKXCF3B"
+            appId: "1:1067521129086:web:c29e00e5a5cd84bb74362f"
         };
 
         const secretKey = "mat-ma-bi-mat";
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
+        const storage = getStorage(app);
         const provider = new GoogleAuthProvider();
 
-        window.login = () => signInWithPopup(auth, provider).catch(err => alert(err.message));
+        window.login = () => signInWithPopup(auth, provider);
         window.logout = () => signOut(auth);
 
         onAuthStateChanged(auth, (user) => {
-            if (user) {
-                document.getElementById('auth-screen').style.display = 'none';
-                document.getElementById('chat-screen').style.display = 'flex';
-                loadMessages();
-            } else {
-                document.getElementById('auth-screen').style.display = 'flex';
-                document.getElementById('chat-screen').style.display = 'none';
-            }
+            document.getElementById('auth-screen').style.display = user ? 'none' : 'flex';
+            document.getElementById('chat-screen').style.display = user ? 'flex' : 'none';
+            if(user) loadMessages();
         });
+
+        window.sendMessage = () => {
+            const input = document.getElementById("msgInput");
+            if (!input.value.trim()) return;
+            const encrypted = CryptoJS.AES.encrypt(input.value, secretKey).toString();
+            push(ref(db, 'messages'), { text: encrypted, type: 'text' });
+            input.value = "";
+        };
+
+        window.uploadFile = async (input) => {
+            const file = input.files[0];
+            if (!file) return;
+            const path = 'uploads/' + Date.now() + file.name;
+            const snapshot = await uploadBytes(storageRef(storage, path), file);
+            const url = await getDownloadURL(snapshot.ref);
+            push(ref(db, 'messages'), { text: url, type: file.type.startsWith('video') ? 'video' : 'image' });
+        };
+
+        let mediaRecorder, chunks = [];
+        window.toggleRecord = async () => {
+            if (!mediaRecorder || mediaRecorder.state === "inactive") {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                document.getElementById("recordBtn").innerText = "⏹️";
+                mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    const path = 'audio/' + Date.now() + '.webm';
+                    const snapshot = await uploadBytes(storageRef(storage, path), blob);
+                    const url = await getDownloadURL(snapshot.ref);
+                    push(ref(db, 'messages'), { text: url, type: 'audio' });
+                    chunks = [];
+                };
+            } else {
+                mediaRecorder.stop();
+                document.getElementById("recordBtn").innerText = "🎤";
+            }
+        };
 
         function loadMessages() {
             onValue(ref(db, 'messages'), (snapshot) => {
                 const list = document.getElementById("chatList");
                 list.innerHTML = "";
                 snapshot.forEach((child) => {
-                    try {
-                        const decrypted = CryptoJS.AES.decrypt(child.val().text, secretKey).toString(CryptoJS.enc.Utf8);
-                        list.innerHTML += `<div class="message">${decrypted}</div>`;
-                    } catch (e) {}
+                    const {text, type} = child.val();
+                    let content = "";
+                    if (type === 'text') content = CryptoJS.AES.decrypt(text, secretKey).toString(CryptoJS.enc.Utf8);
+                    else if (type === 'image') content = `<img src="${text}" style="width:100%; border-radius:10px">`;
+                    else if (type === 'video') content = `<video src="${text}" controls style="width:100%"></video>`;
+                    else if (type === 'audio') content = `<audio src="${text}" controls></audio>`;
+                    list.innerHTML += `<div class="message">${content}</div>`;
                 });
+                list.scrollTop = list.scrollHeight;
             });
         }
-
-        window.sendMessage = () => {
-            const input = document.getElementById("msgInput");
-            if (!input.value.trim()) return;
-            const encrypted = CryptoJS.AES.encrypt(input.value, secretKey).toString();
-            push(ref(db, 'messages'), { text: encrypted });
-            input.value = "";
-        };
     </script>
 </body>
 </html>
