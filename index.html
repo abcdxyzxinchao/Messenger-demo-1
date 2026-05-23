@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #000; color: #fff; height: 100vh; display: flex; flex-direction: column; }
-        #auth-screen, #chat-screen { flex: 1; padding: 20px; display: flex; flex-direction: column; }
+        #auth-screen, #chat-screen { flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: center; }
         #chat-screen { display: none; }
         .message { background: #333; padding: 10px; border-radius: 15px; margin-bottom: 10px; width: fit-content; max-width: 80%; }
         input { padding: 10px; margin: 10px 0; border-radius: 20px; border: none; }
@@ -15,13 +15,11 @@
     </style>
 </head>
 <body>
-    <!-- Màn hình Đăng nhập -->
     <div id="auth-screen">
         <h2>Messenger Login</h2>
         <button onclick="login()">Đăng nhập bằng Google</button>
     </div>
 
-    <!-- Màn hình Chat -->
     <div id="chat-screen">
         <div id="chatList" style="flex: 1; overflow-y: auto;"></div>
         <input id="msgInput" placeholder="Aa...">
@@ -31,21 +29,29 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getAuth, signInWithRedirect, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        const firebaseConfig = { /* ĐIỀN CONFIG CỦA BẠN VÀO ĐÂY */ };
-        const secretKey = "mat-ma-bi-mat";
+        const firebaseConfig = {
+            apiKey: "AIzaSyBMsgEHeLOUMv4DCkfpj5vsjCQC6ySNNg0",
+            authDomain: "mesaenger-demo.firebaseapp.com",
+            databaseURL: "https://mesaenger-demo-default-rtdb.firebaseio.com",
+            projectId: "mesaenger-demo",
+            storageBucket: "mesaenger-demo.firebasestorage.app",
+            messagingSenderId: "1067521129086",
+            appId: "1:1067521129086:web:c29e00e5a5cd84bb74362f",
+            measurementId: "G-V7BVKXCF3B"
+        };
 
+        const secretKey = "mat-ma-bi-mat";
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
         const provider = new GoogleAuthProvider();
 
-        window.login = () => signInWithRedirect(auth, provider);
+        window.login = () => signInWithPopup(auth, provider).catch((error) => console.error("Lỗi đăng nhập:", error));
         window.logout = () => signOut(auth);
 
-        // Kiểm tra trạng thái đăng nhập
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 document.getElementById('auth-screen').style.display = 'none';
@@ -62,14 +68,17 @@
                 const list = document.getElementById("chatList");
                 list.innerHTML = "";
                 snapshot.forEach((child) => {
-                    const decrypted = CryptoJS.AES.decrypt(child.val().text, secretKey).toString(CryptoJS.enc.Utf8);
-                    list.innerHTML += `<div class="message">${decrypted}</div>`;
+                    try {
+                        const decrypted = CryptoJS.AES.decrypt(child.val().text, secretKey).toString(CryptoJS.enc.Utf8);
+                        list.innerHTML += `<div class="message">${decrypted}</div>`;
+                    } catch (e) { console.error("Giải mã lỗi"); }
                 });
             });
         }
 
         window.sendMessage = () => {
             const input = document.getElementById("msgInput");
+            if (!input.value.trim()) return;
             const encrypted = CryptoJS.AES.encrypt(input.value, secretKey).toString();
             push(ref(db, 'messages'), { text: encrypted });
             input.value = "";
