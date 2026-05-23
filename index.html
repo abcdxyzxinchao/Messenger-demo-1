@@ -26,6 +26,7 @@
     <div id="chat-screen">
         <div id="chatList"></div>
         <div class="controls">
+            <!-- Đã cập nhật accept để chọn được cả ảnh và video -->
             <input type="file" id="fileInput" accept="image/*,video/*" style="display:none" onchange="uploadFile(this)">
             <button onclick="document.getElementById('fileInput').click()">📷</button>
             <button id="recordBtn" onclick="toggleRecord()">🎤</button>
@@ -51,7 +52,10 @@
             appId: "1:1067521129086:web:c29e00e5a5cd84bb74362f"
         };
 
+        const IMGBB_API_KEY = "6d43d6ee5edd53bc7b2c0682eb8ac03";
+        const IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload";
         const secretKey = "mat-ma-bi-mat";
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
@@ -75,13 +79,27 @@
             input.value = "";
         };
 
+        // Hàm upload kết hợp: Dùng Imgbb cho ảnh/video
         window.uploadFile = async (input) => {
             const file = input.files[0];
             if (!file) return;
-            const path = 'uploads/' + Date.now() + file.name;
-            const snapshot = await uploadBytes(storageRef(storage, path), file);
-            const url = await getDownloadURL(snapshot.ref);
-            push(ref(db, 'messages'), { text: url, type: file.type.startsWith('video') ? 'video' : 'image' });
+
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('key', IMGBB_API_KEY);
+
+            try {
+                const response = await fetch(IMGBB_UPLOAD_URL, { method: 'POST', body: formData });
+                const result = await response.json();
+                if (result.success) {
+                    const type = file.type.startsWith('video') ? 'video' : 'image';
+                    push(ref(db, 'messages'), { text: result.data.url, type: type });
+                } else {
+                    alert("Lỗi upload: " + result.error.message);
+                }
+            } catch (error) {
+                console.error("Lỗi:", error);
+            }
         };
 
         let mediaRecorder, chunks = [];
@@ -94,6 +112,7 @@
                 mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
                 mediaRecorder.onstop = async () => {
                     const blob = new Blob(chunks, { type: 'audio/webm' });
+                    // Vẫn giữ Firebase cho ghi âm như logic gốc
                     const path = 'audio/' + Date.now() + '.webm';
                     const snapshot = await uploadBytes(storageRef(storage, path), blob);
                     const url = await getDownloadURL(snapshot.ref);
