@@ -6,22 +6,12 @@
     <title>Messenger Security Pro</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; height: 100vh; display: flex; flex-direction: column; }
-        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:9999; transition: opacity 0.5s; }
-        #auth-screen { flex: 1; display: none; align-items: center; justify-content: center; padding: 20px; }
-        .auth-box { width: 100%; max-width: 350px; background: #1e1e1e; padding: 30px; border-radius: 25px; border: 1px solid #333; display: flex; flex-direction: column; gap: 15px; }
-        .auth-box input { padding: 15px; border-radius: 12px; border: none; background: #2a2a2a; color: white; }
-        .auth-btn { padding: 12px; border-radius: 12px; border: none; background: #0084ff; color: white; font-weight: bold; cursor: pointer; }
-        #chat-screen, #friend-screen { display: none; flex: 1; flex-direction: column; width: 100%; max-width: 500px; margin: auto; background: #121212; }
-        #header { width: 100%; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; }
-        #chatList { flex: 1; width: 100%; overflow-y: auto; padding: 10px; }
-        .message-row { display: flex; margin-bottom: 10px; }
-        .row-sent { justify-content: flex-end; }
-        .bubble { padding: 12px; border-radius: 15px; max-width: 75%; word-break: break-all; }
-        .sent { background: #0084ff; }
-        .received { background: #333; }
-        .controls { width: 100%; padding: 10px; display: flex; gap: 5px; background: #1e1e1e; }
-        input { flex: 1; padding: 10px; border-radius: 20px; border: none; }
-        button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; }
+        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:9999; }
+        #auth-screen, #chat-screen, #friend-screen { display: none; flex: 1; flex-direction: column; width: 100%; max-width: 500px; margin: auto; padding: 10px; }
+        .bubble { padding: 10px; border-radius: 15px; margin: 5px; max-width: 75%; background: #333; }
+        .sent { background: #0084ff; align-self: flex-end; }
+        button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; margin: 5px; }
+        input { padding: 10px; margin: 5px; border-radius: 20px; border: none; color: #000; }
     </style>
 </head>
 <body>
@@ -29,70 +19,74 @@
     <div id="splash"><h1>Messenger Pro</h1></div>
 
     <div id="auth-screen">
-        <div class="auth-box">
-            <input id="email" placeholder="Email">
-            <input id="pass" type="password" placeholder="Mật khẩu">
-            <button class="auth-btn" onclick="handleAuth()">Đăng nhập</button>
-        </div>
+        <input id="email" placeholder="Email">
+        <input id="pass" type="password" placeholder="Mật khẩu">
+        <button onclick="login()">Đăng nhập</button>
     </div>
 
     <div id="chat-screen">
         <div id="header">
-            <button onclick="switchScreen('friend-screen')">Tìm bạn</button>
-            <span id="userName">Chat</span>
-            <button onclick="logout()">Thoát</button>
+            <button onclick="goScreen('friend-screen')">Bạn bè</button>
         </div>
         <div id="chatList"></div>
-        <div class="controls">
-            <input id="msgInput" placeholder="Aa...">
-            <button onclick="sendMessage()">Gửi</button>
-        </div>
+        <input id="msgInput" placeholder="Aa...">
+        <button onclick="sendMsg()">Gửi</button>
     </div>
 
     <div id="friend-screen">
-        <div id="header">
-            <button onclick="switchScreen('chat-screen')">Quay lại</button>
-            <h3>Tìm bạn</h3>
-        </div>
-        <input id="searchEmail" placeholder="Nhập email...">
+        <input id="searchEmail" placeholder="Email bạn bè...">
         <button onclick="findFriend()">Tìm kiếm</button>
-        <div id="friend-list" style="padding:10px"></div>
+        <div id="friend-list"></div>
+        <button onclick="goScreen('chat-screen')">Quay lại Chat</button>
     </div>
 
     <script type="module">
+        // Ẩn splash ngay lập tức để tránh treo màn hình
+        document.getElementById('splash').style.display = 'none';
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
         import { getDatabase, ref, push, onValue, set, get, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-        // CONFIG CỦA ÔNG (Dán vào đây)
-        const firebaseConfig = { /* Dán lại config ở đây */ };
-        
+        // Cấu hình từ image_16.png
+        const firebaseConfig = { 
+            apiKey: "AIzaSyBMsgEHeLOUmv4o9m6qNnJ-rP5V4",
+            authDomain: "mesaenger-demo.firebaseapp.com",
+            databaseURL: "https://mesaenger-demo-default-rtdb.firebaseio.com",
+            projectId: "mesaenger-demo",
+            storageBucket: "mesaenger-demo.appspot.com",
+            messagingSenderId: "1067521129086",
+            appId: "1:1067521129086:web:8e16e6f4773c242a47e5b6"
+        };
+
         const app = initializeApp(firebaseConfig);
         window.auth = getAuth(app);
         window.db = getDatabase(app);
         window.currentChatId = null;
 
-        // Cơ chế tắt splash an toàn
-        setTimeout(() => {
-            const splash = document.getElementById('splash');
-            splash.style.opacity = '0';
-            setTimeout(() => splash.style.display = 'none', 500);
-        }, 1000);
+        onAuthStateChanged(window.auth, (user) => {
+            if (user) {
+                document.getElementById('auth-screen').style.display = 'none';
+                document.getElementById('chat-screen').style.display = 'flex';
+                loadMessages();
+            } else {
+                document.getElementById('auth-screen').style.display = 'flex';
+            }
+        });
 
-        window.handleAuth = () => {
+        window.login = () => {
             signInWithEmailAndPassword(window.auth, document.getElementById('email').value, document.getElementById('pass').value)
-            .catch(e => alert(e.message));
+            .catch(e => alert("Lỗi: " + e.message));
         };
 
-        window.switchScreen = (id) => {
-            document.getElementById('chat-screen').style.display = id === 'chat-screen' ? 'flex' : 'none';
-            document.getElementById('friend-screen').style.display = id === 'friend-screen' ? 'flex' : 'none';
+        window.goScreen = (id) => {
+            document.getElementById('chat-screen').style.display = (id === 'chat-screen') ? 'flex' : 'none';
+            document.getElementById('friend-screen').style.display = (id === 'friend-screen') ? 'flex' : 'none';
         };
 
         window.findFriend = async () => {
             const email = document.getElementById("searchEmail").value;
-            const q = query(ref(window.db, 'users'), orderByChild('email'), equalTo(email));
-            const snap = await get(q);
+            const snap = await get(query(ref(window.db, 'users'), orderByChild('email'), equalTo(email)));
             const list = document.getElementById("friend-list");
             list.innerHTML = "";
             snap.forEach(child => {
@@ -101,16 +95,13 @@
         };
 
         window.addFriend = (friendUid) => {
-            const myUid = window.auth.currentUser.uid;
-            const chatId = [myUid, friendUid].sort().join('_');
-            set(ref(window.db, 'friends/' + myUid + '/' + friendUid), { chatId });
-            set(ref(window.db, 'friends/' + friendUid + '/' + myUid), { chatId });
-            window.currentChatId = chatId;
-            loadMessages();
-            switchScreen('chat-screen');
+            const chatId = [window.auth.currentUser.uid, friendUid].sort().join('_');
+            set(ref(window.db, 'friends/' + window.auth.currentUser.uid + '/' + friendUid), { chatId });
+            set(ref(window.db, 'friends/' + friendUid + '/' + window.auth.currentUser.uid), { chatId });
+            alert("Đã kết bạn!");
         };
 
-        window.sendMessage = () => {
+        window.sendMsg = () => {
             const input = document.getElementById("msgInput");
             if (!input.value.trim()) return;
             const path = window.currentChatId ? 'chats/' + window.currentChatId : 'messages';
@@ -125,24 +116,10 @@
                 list.innerHTML = "";
                 snapshot.forEach(child => {
                     const msg = child.val();
-                    const isMe = msg.uid === window.auth.currentUser.uid;
-                    list.innerHTML += `<div class="message-row ${isMe ? 'row-sent' : ''}"><div class="bubble ${isMe ? 'sent' : 'received'}">${msg.text}</div></div>`;
+                    list.innerHTML += `<div class="bubble ${msg.uid === window.auth.currentUser.uid ? 'sent' : ''}">${msg.text}</div>`;
                 });
             });
         }
-
-        onAuthStateChanged(window.auth, (user) => {
-            if(user) {
-                document.getElementById('auth-screen').style.display = 'none';
-                document.getElementById('chat-screen').style.display = 'flex';
-                set(ref(window.db, 'users/' + user.uid), { email: user.email });
-                loadMessages();
-            } else {
-                document.getElementById('auth-screen').style.display = 'flex';
-            }
-        });
-        
-        window.logout = () => signOut(window.auth).then(() => window.location.reload());
     </script>
 </body>
 </html>
