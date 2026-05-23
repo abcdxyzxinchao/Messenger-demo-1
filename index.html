@@ -7,12 +7,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; height: 100vh; display: flex; flex-direction: column; }
-        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:1000; }
+        #splash { position: fixed; top:0; left:0; width:100%; height:100%; background:#121212; display:flex; justify-content:center; align-items:center; z-index:9999; }
         #auth-screen { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; }
         #chat-screen { display: none; flex: 1; flex-direction: column; width: 100%; max-width: 500px; margin: auto; }
-        #header { width: 100%; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; }
+        
+        #header { width: 100%; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; position: relative; }
         #avatar { width: 40px; height: 40px; border-radius: 50%; cursor: pointer; }
-        #profile-menu { display: none; position: absolute; top: 60px; right: 10px; background: #222; padding: 15px; border-radius: 10px; z-index: 500; border: 1px solid #444; }
+        
+        /* Menu profile */
+        #profile-menu { display: none; position: absolute; top: 60px; right: 10px; background: #222; padding: 15px; border-radius: 10px; z-index: 9999; border: 1px solid #444; width: 200px; }
+        
         #chatList { flex: 1; width: 100%; overflow-y: auto; padding: 10px; }
         .message-row { display: flex; margin-bottom: 10px; }
         .row-sent { justify-content: flex-end; }
@@ -20,6 +24,7 @@
         .bubble { padding: 10px; border-radius: 15px; max-width: 70%; word-break: break-all; }
         .sent { background: #0084ff; }
         .received { background: #333; }
+        
         .controls { width: 100%; padding: 10px; display: flex; gap: 5px; background: #1e1e1e; }
         input { flex: 1; padding: 10px; border-radius: 20px; border: none; }
         button { padding: 10px; border-radius: 20px; border: none; background: #0084ff; color: white; cursor: pointer; }
@@ -31,11 +36,11 @@
 
     <div id="auth-screen">
         <h2>Messenger Login</h2>
-        <input id="email" placeholder="Email" style="margin:5px; padding:10px; border-radius:20px; border:none; width:80%"><br>
-        <input id="pass" type="password" placeholder="Mật khẩu" style="margin:5px; padding:10px; border-radius:20px; border:none; width:80%"><br>
+        <input id="email" placeholder="Email" style="margin:5px; padding:10px; width:80%">
+        <input id="pass" type="password" placeholder="Mật khẩu" style="margin:5px; padding:10px; width:80%">
         <button onclick="handleEmailAuth('login')">Đăng nhập</button>
         <button onclick="handleEmailAuth('signup')">Đăng ký</button>
-        <button onclick="loginGoogle()" style="background:#db4437">Đăng nhập Google</button>
+        <button onclick="loginGoogle()" style="background:#db4437">Google</button>
     </div>
 
     <div id="chat-screen">
@@ -46,7 +51,7 @@
         <div id="profile-menu">
             <p id="userEmailDisplay"></p>
             <label><input type="checkbox" id="toggleEnc" checked> Mã hóa đầu cuối</label><br><br>
-            <button onclick="signOut(auth)" style="background:red; width:100%">Đăng xuất</button>
+            <button onclick="logout()" style="background:red; width:100%; cursor:pointer;">Đăng xuất</button>
         </div>
         <div id="chatList"></div>
         <div class="controls">
@@ -97,6 +102,10 @@
             menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
         };
 
+        window.logout = () => {
+            signOut(auth).then(() => window.location.reload());
+        };
+
         onAuthStateChanged(auth, (user) => {
             document.getElementById('splash').style.display = 'none';
             document.getElementById('auth-screen').style.display = user ? 'none' : 'flex';
@@ -114,10 +123,36 @@
             if (!input.value.trim()) return;
             const useEnc = document.getElementById("toggleEnc").checked;
             const text = useEnc ? CryptoJS.AES.encrypt(input.value, secretKey).toString() : input.value;
-            push(ref(db, 'messages'), { text, type: 'text', uid: auth.currentUser.uid, encrypted: useEnc });
+            push(ref(db, 'messages'), { text, type: 'text', uid: auth.currentUser.uid, isEncrypted: useEnc });
             input.value = "";
         };
 
+        // Logic loadMessages: Luôn giải mã nếu là tin nhắn mã hóa, người dùng chỉ thấy chữ thường
+        function loadMessages() {
+            onValue(ref(db, 'messages'), (snapshot) => {
+                const list = document.getElementById("chatList");
+                list.innerHTML = "";
+                snapshot.forEach((child) => {
+                    const msg = child.val();
+                    const isMe = msg.uid === auth.currentUser.uid;
+                    let content = msg.text;
+                    
+                    if (msg.type === 'text' && msg.isEncrypted) {
+                        try { content = CryptoJS.AES.decrypt(msg.text, secretKey).toString(CryptoJS.enc.Utf8); } 
+                        catch(e) { content = "Lỗi giải mã"; }
+                    }
+                    
+                    if (msg.type === 'image') content = `<img src="${msg.text}" style="width:100%; border-radius:10px">`;
+                    else if (msg.type === 'video') content = `<video src="${msg.text}" controls style="width:100%"></video>`;
+                    else if (msg.type === 'audio') content = `<audio src="${msg.text}" controls></audio>`;
+                    
+                    list.innerHTML += `<div class="message-row ${isMe ? 'row-sent' : 'row-received'}"><div class="bubble ${isMe ? 'sent' : 'received'}">${content}</div></div>`;
+                });
+                list.scrollTop = list.scrollHeight;
+            });
+        }
+
+        // Tích hợp upload (Imgbb + Firebase)
         window.uploadFile = async (input) => {
             const file = input.files[0];
             if (!file) return;
@@ -136,6 +171,7 @@
             }
         };
 
+        // Logic Audio (Firebase)
         let mediaRecorder, chunks = [];
         window.toggleRecord = async () => {
             if (!mediaRecorder || mediaRecorder.state === "inactive") {
@@ -157,29 +193,6 @@
                 document.getElementById("recordBtn").innerText = "🎤";
             }
         };
-
-        function loadMessages() {
-            onValue(ref(db, 'messages'), (snapshot) => {
-                const list = document.getElementById("chatList");
-                list.innerHTML = "";
-                snapshot.forEach((child) => {
-                    const msg = child.val();
-                    const isMe = msg.uid === auth.currentUser.uid;
-                    let content = msg.text;
-                    // Logic giải mã thông minh: kiểm tra nếu tin nhắn có dạng mã hóa hoặc đã bật cờ encrypted
-                    if (msg.type === 'text' && (msg.encrypted || msg.text.startsWith('U2Fsd'))) {
-                        try { content = CryptoJS.AES.decrypt(msg.text, secretKey).toString(CryptoJS.enc.Utf8); } catch(e) {}
-                    }
-                    
-                    if (msg.type === 'image') content = `<img src="${msg.text}" style="width:100%; border-radius:10px">`;
-                    else if (msg.type === 'video') content = `<video src="${msg.text}" controls style="width:100%"></video>`;
-                    else if (msg.type === 'audio') content = `<audio src="${msg.text}" controls></audio>`;
-                    
-                    list.innerHTML += `<div class="message-row ${isMe ? 'row-sent' : 'row-received'}"><div class="bubble ${isMe ? 'sent' : 'received'}">${content}</div></div>`;
-                });
-                list.scrollTop = list.scrollHeight;
-            });
-        }
     </script>
 </body>
 </html>
