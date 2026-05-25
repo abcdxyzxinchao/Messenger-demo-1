@@ -1,177 +1,85 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>Shop Pro Full</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>My Store - Admin Version</title>
 </head>
-<body>
+<body class="bg-gray-50">
 
-<h2 id="status">Loading...</h2>
+    <nav class="flex justify-between items-center p-6 bg-white shadow-sm sticky top-0 z-50">
+        <h1 class="text-2xl font-bold text-blue-600 cursor-pointer" id="nav-brand">MY STORE</h1>
+        <div id="auth-nav">
+            <button id="btn-show-auth" class="px-4 py-2 bg-blue-500 text-white rounded-lg">Đăng nhập</button>
+        </div>
+    </nav>
 
-<button onclick="loginGoogle()">Login</button>
-<button onclick="logout()">Logout</button>
+    <div id="app" class="p-6">
+        <div id="page-home" class="grid grid-cols-1 md:grid-cols-4 gap-6"></div>
 
-<hr>
+        <div id="page-wishlist" class="hidden">...</div>
+        <div id="page-detail" class="hidden">...</div>
+        <div id="page-auth" class="hidden">...</div>
+    </div>
 
-<h3>ADMIN ADD PRODUCT</h3>
-<input id="name" placeholder="Name">
-<input id="price" placeholder="Price">
-<button onclick="addProduct()">Add</button>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getFirestore, doc, updateDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-<hr>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBoX1FuReGf2onOHS8GlYq8jc5b5398hQU",
+            authDomain: "banhang-b31dd.firebaseapp.com",
+            projectId: "banhang-b31dd",
+            storageBucket: "banhang-b31dd.firebasestorage.app",
+            messagingSenderId: "634655097273",
+            appId: "1:634655097273:web:899337e325e046eb91f668"
+        };
 
-<h3>PRODUCTS</h3>
-<div id="products"></div>
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const ADMIN_EMAIL = "ngohieu20089@gmail.com";
 
-<hr>
+        // Hàm render sản phẩm
+        const renderProducts = (currentUser) => {
+            const container = document.getElementById('page-home');
+            container.innerHTML = "";
+            for(let i=1; i<=20; i++) {
+                const isAdmin = currentUser?.email === ADMIN_EMAIL;
+                container.innerHTML += `
+                    <div class="bg-white p-4 rounded-xl shadow-md border relative">
+                        <div class="h-40 bg-gray-200 mb-4 rounded"></div>
+                        <h3 class="font-bold" id="title-${i}">Sản phẩm ${i}</h3>
+                        <p class="text-red-500 font-semibold">500.000đ</p>
+                        ${isAdmin ? `<button onclick="editProduct(${i})" class="mt-2 w-full bg-yellow-500 text-white rounded">Sửa tên</button>` : ''}
+                    </div>
+                `;
+            }
+        };
 
-<h3>CART</h3>
-<button onclick="checkout()">Checkout</button>
-<div id="cart"></div>
+        // Hàm sửa sản phẩm dành cho Admin
+        window.editProduct = async (id) => {
+            const newName = prompt("Nhập tên mới cho sản phẩm:");
+            if (newName) {
+                try {
+                    // Cập nhật vào Firestore collection 'products'
+                    await setDoc(doc(db, "products", String(id)), { Ten: newName }, { merge: true });
+                    document.getElementById(`title-${id}`).innerText = newName;
+                    alert("Đã cập nhật!");
+                } catch (err) { alert(err.message); }
+            }
+        };
 
-<script type="module">
+        // Logic Auth
+        onAuthStateChanged(auth, (user) => {
+            renderProducts(user); // Render lại để hiện/ẩn nút Sửa
+            // ... (Phần logic hiển thị avatar và menu cũ của bạn)
+        });
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  onSnapshot,
-  doc,
-  setDoc,
-  getDoc
-} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-
-/* ================= CONFIG ================= */
-const firebaseConfig = {
-  apiKey: "AIzaSyBoX1FuReGf2onOHS8GlYq8jc5b5398hQU",
-  authDomain: "banhang-b31dd.firebaseapp.com",
-  projectId: "banhang-b31dd",
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
-
-let user = null;
-let cart = [];
-
-/* ================= AUTH ================= */
-window.loginGoogle = () => signInWithRedirect(auth, provider);
-
-getRedirectResult(auth).catch(console.error);
-
-onAuthStateChanged(auth, async (u) => {
-  user = u;
-  document.getElementById("status").innerText =
-    u ? "Hi: " + u.email : "Not logged in";
-
-  if (u) {
-    await createUserIfNotExists(u);
-    loadCart();
-  }
-});
-
-window.logout = () => signOut(auth);
-
-/* ================= USER ================= */
-async function createUserIfNotExists(u) {
-  const ref = doc(db, "users", u.uid);
-  const snap = await getDoc(ref);
-
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      email: u.email,
-      role: "user"
-    });
-  }
-}
-
-/* ================= PRODUCTS ================= */
-window.addProduct = async () => {
-  if (!user) return alert("Login first");
-
-  await addDoc(collection(db, "products"), {
-    name: name.value,
-    price: price.value,
-    createdAt: Date.now()
-  });
-};
-
-onSnapshot(collection(db, "products"), (snap) => {
-  let html = "";
-
-  snap.forEach(d => {
-    let p = d.data();
-
-    html += `
-      <div style="border:1px solid #ccc;padding:10px;margin:5px">
-        <b>${p.name}</b><br>
-        ${p.price} đ<br>
-        <button onclick="addToCart('${p.name}',${p.price})">
-          Add Cart
-        </button>
-      </div>
-    `;
-  });
-
-  products.innerHTML = html;
-});
-
-/* ================= CART ================= */
-window.addToCart = (name, price) => {
-  cart.push({ name, price });
-  renderCart();
-};
-
-function renderCart() {
-  let total = 0;
-  let html = "";
-
-  cart.forEach(i => {
-    html += `${i.name} - ${i.price}<br>`;
-    total += Number(i.price);
-  });
-
-  html += "<hr>Total: " + total;
-  cartDiv.innerHTML = html;
-}
-
-/* ================= CHECKOUT ================= */
-window.checkout = async () => {
-  if (!user) return;
-
-  await addDoc(collection(db, "orders"), {
-    uid: user.uid,
-    items: cart,
-    total: cart.reduce((s,i)=>s+Number(i.price),0),
-    status: "pending",
-    createdAt: Date.now()
-  });
-
-  cart = [];
-  renderCart();
-  alert("Order placed");
-};
-
-function loadCart() {
-  renderCart();
-}
-
-</script>
-
-<div id="products"></div>
-<div id="cartDiv"></div>
-
+        // Khởi tạo ban đầu
+        renderProducts(null);
+    </script>
 </body>
 </html>
